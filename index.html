@@ -163,19 +163,28 @@ const WK_BY_NAME = {
 let STORES = [], T25 = [], T26 = [], S25 = {}, S26 = {};
 
 function parseCSV(text) {
+  // BOM 제거
+  text = text.replace(/^\uFEFF/, '');
   const rows = [];
-  for (const raw of text.split('\n')) {
-    if (!raw.trim()) continue;
-    const row = [];
-    let inQ = false, cell = '';
-    for (const c of raw) {
-      if (c === '"') { inQ = !inQ; continue; }
-      if (c === ',' && !inQ) { row.push(cell.trim()); cell = ''; continue; }
+  let row = [], cell = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      if (inQ && text[i+1] === '"') { cell += '"'; i++; } // escaped quote ""
+      else inQ = !inQ;
+    } else if (c === ',' && !inQ) {
+      row.push(cell.trim()); cell = '';
+    } else if ((c === '\n' || c === '\r') && !inQ) {
+      if (c === '\r' && text[i+1] === '\n') i++; // CRLF
+      row.push(cell.trim());
+      if (row.some(v => v)) rows.push(row);
+      row = []; cell = '';
+    } else {
+      // 따옴표 안 줄바꿈(c==='\n' && inQ)은 여기서 cell에 추가됨
       cell += c;
     }
-    row.push(cell.trim());
-    rows.push(row);
   }
+  if (cell || row.length) { row.push(cell.trim()); if (row.some(v=>v)) rows.push(row); }
   return rows;
 }
 function pn(s) { const n = parseInt((s||'').replace(/[,\s]/g,'')); return isNaN(n)?0:n; }
@@ -188,7 +197,8 @@ async function loadData() {
 
     // Row 0: [년, "", 월, 수, 합계, 매장당평균, store1, store2, ...]
     const hdr = rows[0];
-    const allNames = hdr.slice(6);
+    // 셀 내 줄바꿈 정규화: "(신)의정부온라인\n(SSG)" → "(신)의정부온라인(SSG)"
+    const allNames = hdr.slice(6).map(n => n.replace(/\s*\n\s*/g, ''));
 
     let curYear = '';
     const monthly = {};
