@@ -130,10 +130,11 @@ const SHEET_ID = '1y3G2qm-743LvJXngpSeXfUptSSiS5rXBagky_ahq92M';
 const HIDDEN_STORES = ['(신)의정부온라인(SSG)', '평촌(온)', '전주', '(롯)센텀', '링크맘', '(롯)서면'];
 
 // ── 주차별 실데이터 (이름 기반 맵) ───────────────────────────────
-const WK_LABELS = ['12월5주','1월1주','1월2주','1월3주','1월4주','2월1주','2월2주','2월3주','2월4주','3월1주','3월2주','3월3주','3월4주','4월1주','4월2주'];
-const WK_T26 = [10210455,60973127,54415595,48372109,42967691,48385945,61072900,102812909,92965564,129165200,80631174,74871736,79739882,79353200,79446409];
-const WK_T25 = [5563455,39269173,38582818,43479900,60306545,38047364,37825182,56300545,90795791,106679073,78806200,72544482,64488445,62765716,61770909];
-const WK_BY_NAME = {
+// Google Sheets의 "주차별" 시트가 있으면 loadData()에서 자동 업데이트됨
+let WK_LABELS = ['12월5주','1월1주','1월2주','1월3주','1월4주','2월1주','2월2주','2월3주','2월4주','3월1주','3월2주','3월3주','3월4주','4월1주','4월2주'];
+let WK_T26 = [10210455,60973127,54415595,48372109,42967691,48385945,61072900,102812909,92965564,129165200,80631174,74871736,79739882,79353200,79446409];
+let WK_T25 = [5563455,39269173,38582818,43479900,60306545,38047364,37825182,56300545,90795791,106679073,78806200,72544482,64488445,62765716,61770909];
+let WK_BY_NAME = {
   '(롯)남악_O':    {s26:[0,8595455,7198909,6174273,4841636,4566273,3930000,11325818,12131000,14913000,8709727,8416091,8043909,9041818,8359818],s25:[1177636,5683909,5167455,5171182,10258727,5979727,4794909,6630909,9132727,12840909,10661273,8601091,8380091,7978909,7292818]},
   '부천 뉴코아_O': {s26:[1088364,5058545,4351091,3046636,3677818,3574364,9353900,9602636,10386545,14100364,9052637,6876000,7623364,6719273,7095273],s25:[354364,3187727,4796364,7790545,6053909,4899000,4183364,7606455,14762818,14064545,10570364,9533273,6621182,6173273,7340591]},
   '(신)의정부':    {s26:[0,2154455,1421273,1245455,1696364,1471091,1493364,3491636,2138545,4167091,2658636,2234818,2467545,2232455,3093909],s25:[354364,3187727,4796364,7790545,6053909,4899000,4183364,7606455,14762818,14064545,10570364,9533273,6621182,6173273,7340591]},
@@ -245,6 +246,47 @@ async function loadData() {
     console.warn('시트 로드 실패, 내장 데이터 사용:', e);
     useFallback();
   }
+
+  // "26 Weekly" 시트에서 주차별 데이터 자동 로드
+  try {
+    const wkUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=26%20Weekly`;
+    const wkRes = await fetch(wkUrl);
+    const wkText = await wkRes.text();
+    const wkRows = parseCSV(wkText);
+    parseWeeklyData(wkRows);
+  } catch(e) {
+    // 로드 실패 → 기존 내장 데이터 유지
+  }
+}
+
+function parseWeeklyData(rows) {
+  // "26 Weekly" 시트 구조:
+  // col2: 월주(1월1주 등), col4: 전체26년, col6: 전체25년
+  // col(10 + n*7 + 1): 매장n 26년, col(10 + n*7 + 3): 매장n 25년
+  const STORE_NAMES = [
+    '(롯)남악_O','부천 뉴코아_O','(신)의정부','앨리웨이','유성 NC','여수',
+    '(롯)율하_O','송파','충장','동수원','제주','괴정',
+    '강서 NC','순천','평택','고척','현풍','원주',
+    '나주','마리오','평촌'
+  ];
+  const labels=[], t26=[], t25=[];
+  const byName={};
+  STORE_NAMES.forEach(n => { byName[n]={s26:[],s25:[]}; });
+  for (let i=0; i<rows.length; i++) {
+    const row=rows[i];
+    const wk=(row[2]||'').trim();
+    if (!/\d{1,2}월\d{1,2}주/.test(wk)) continue;
+    labels.push(wk);
+    t26.push(pn(row[4]));
+    t25.push(pn(row[6]));
+    STORE_NAMES.forEach((name,ni) => {
+      const base=10+ni*7;
+      byName[name].s26.push(pn(row[base+1]));
+      byName[name].s25.push(pn(row[base+3]));
+    });
+  }
+  if (labels.length===0) return;
+  WK_LABELS=labels; WK_T26=t26; WK_T25=t25; WK_BY_NAME=byName;
 }
 
 function useFallback() {
@@ -445,8 +487,10 @@ function renderWeeklyTable(id,wk26,wk25,label25,label26){
     </tr>`;
   });
   const sum26=cur26.slice(1).reduce((s,v)=>s+(v||0),0), sum25=cur25.slice(1).reduce((s,v)=>s+(v||0),0), dsum=sum26-sum25;
+  const _wkMonths=WK_LABELS.slice(1).filter((_,i)=>(cur26[i+1]||0)>0||(cur25[i+1]||0)>0).map(l=>l.replace(/\d+주$/,'')).filter((v,i,a)=>a.indexOf(v)===i);
+  const _sumLabel=_wkMonths.length===0?'누적 (주간합계)':_wkMonths.length===1?`${_wkMonths[0]} 누적 (주간합계)`:`1~${_wkMonths[_wkMonths.length-1]} 누적 (주간합계)`;
   html+=`<tr class="td-total">
-    <td>1~4월 누적 (주간합계)</td>
+    <td>${_sumLabel}</td>
     <td>${M(sum25)||'-'}</td><td>${M(sum26)||'-'}</td>
     <td class="td-growth">${(sum26&&sum25)?growthHtml(sum26,sum25):'<span class="growth-flat">-</span>'}</td>
     <td class="td-growth">${(sum26&&sum25)?(dsum>=0?'<span class="growth-up">+':'<span class="growth-down">')+M(Math.abs(dsum))+'</span>':'-'}</td>
