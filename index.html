@@ -486,8 +486,11 @@ function renderWeeklyTable(id,wk26,wk25,label25,label26){
       <td class="td-growth">${(v26&&v25)?(diff>=0?'<span class="growth-up">+':'<span class="growth-down">')+M(Math.abs(diff))+'</span>':'-'}</td>
     </tr>`;
   });
-  const sum26=cur26.slice(1).reduce((s,v)=>s+(v||0),0), sum25=cur25.slice(1).reduce((s,v)=>s+(v||0),0), dsum=sum26-sum25;
-  const _wkMonths=WK_LABELS.slice(1).filter((_,i)=>(cur26[i+1]||0)>0||(cur25[i+1]||0)>0).map(l=>l.replace(/\d+주$/,'')).filter((v,i,a)=>a.indexOf(v)===i);
+  // 26년 데이터가 있는 주차만 기준으로 합계 계산 (동기간 비교)
+  const sum26=cur26.slice(1).reduce((s,v)=>s+(v||0),0);
+  const sum25=cur25.slice(1).reduce((s,v,i)=>s+((cur26[i+1]||0)>0?(v||0):0),0);
+  const dsum=sum26-sum25;
+  const _wkMonths=WK_LABELS.slice(1).filter((_,i)=>(cur26[i+1]||0)>0).map(l=>l.replace(/\d+주$/,'')).filter((v,i,a)=>a.indexOf(v)===i);
   const _sumLabel=_wkMonths.length===0?'누적 (주간합계)':_wkMonths.length===1?`${_wkMonths[0]} 누적 (주간합계)`:`1~${_wkMonths[_wkMonths.length-1]} 누적 (주간합계)`;
   html+=`<tr class="td-total">
     <td>${_sumLabel}</td>
